@@ -62,12 +62,33 @@ async function generateScriptFromContext(input: {
 }): Promise<{ script: string }> {
   try {
     const baseUrl = typeof window !== 'undefined' ? window.location.origin : 'http://localhost:9002';
+    
+    // Enhanced input with better context processing
+    const enhancedInput = {
+      ...input,
+      connectedItems: input.connectedItems?.map(item => ({
+        ...item,
+        // Prioritize scraped content over regular content
+        content: item.scrapedContent || item.content,
+        // Add metadata about content source
+        hasScrapedContent: !!item.scrapedContent,
+        contentLength: (item.scrapedContent || item.content)?.length || 0
+      }))
+    };
+
+    console.log('Enhanced input for AI:', {
+      promptLength: enhancedInput.prompt.length,
+      connectedItemsCount: enhancedInput.connectedItems?.length || 0,
+      itemsWithScrapedContent: enhancedInput.connectedItems?.filter(item => item.hasScrapedContent).length || 0,
+      totalContentLength: enhancedInput.connectedItems?.reduce((sum, item) => sum + item.contentLength, 0) || 0
+    });
+
     const response = await fetch(`${baseUrl}/api/generate-script`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
       },
-      body: JSON.stringify(input),
+      body: JSON.stringify(enhancedInput),
     });
 
     if (!response.ok) {

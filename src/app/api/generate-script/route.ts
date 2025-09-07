@@ -55,8 +55,13 @@ function buildEnrichedContext(connectedItems?: ConnectedItem[]): string {
     
     // Use scraped content if available, otherwise use regular content
     const content = item.scrapedContent || item.content;
+    const hasScrapedContent = !!item.scrapedContent;
     
     if (content) {
+      // Add indicator if this is scraped content
+      if (hasScrapedContent) {
+        section += `[SCRAPED CONTENT - Full transcript/content extracted]\n`;
+      }
       section += `Content: ${content}\n`;
     }
     
@@ -74,12 +79,35 @@ function buildEnrichedContext(connectedItems?: ConnectedItem[]): string {
       if (item.metadata.description) {
         section += `Description: ${item.metadata.description}\n`;
       }
+      // Add enhanced metadata for scraped content
+      if (hasScrapedContent && item.metadata.highlights) {
+        section += `Key Highlights: ${item.metadata.highlights.join(', ')}\n`;
+      }
+      if (hasScrapedContent && item.metadata.sentiment) {
+        section += `Sentiment Analysis: ${item.metadata.sentiment}\n`;
+      }
+      if (hasScrapedContent && item.metadata.entities) {
+        section += `Key Entities: ${item.metadata.entities.join(', ')}\n`;
+      }
     }
     
     return section;
   });
 
-  return contextSections.join('\n');
+  // Add summary of content types
+  const scrapedCount = connectedItems.filter(item => item.scrapedContent).length;
+  const totalCount = connectedItems.length;
+  
+  let summary = `\n--- Content Summary ---\n`;
+  summary += `Total connected sources: ${totalCount}\n`;
+  summary += `Sources with scraped content: ${scrapedCount}\n`;
+  summary += `Sources with basic content: ${totalCount - scrapedCount}\n`;
+  
+  if (scrapedCount > 0) {
+    summary += `\nNote: ${scrapedCount} source(s) have full scraped content (transcripts, full text) which provides richer context for analysis.\n`;
+  }
+
+  return contextSections.join('\n') + summary;
 }
 
 function containsArabic(text?: string): boolean {
@@ -142,7 +170,13 @@ export async function POST(request: NextRequest) {
 
 The user has provided a prompt and may have connected various content sources from their whiteboard. Use this information to generate a helpful, creative, and actionable response.
 
-When multiple sources are provided, synthesize information across them to create more valuable insights.
+IMPORTANT: When sources have "SCRAPED CONTENT" indicators, this means you have access to full transcripts, complete text, or detailed content from those sources. Use this rich content to provide more accurate, detailed, and contextually relevant responses.
+
+When multiple sources are provided, synthesize information across them to create more valuable insights. Pay special attention to:
+- Key themes and patterns across all sources
+- Specific quotes or data points from scraped content
+- Cross-references between different sources
+- Actionable insights derived from the full content
 
 Language instruction: ${replyInArabic ? 'Reply in Arabic. Keep the output fully in Arabic.' : 'Reply in the same language as the user prompt.'}
 
@@ -161,10 +195,13 @@ User Prompt: ${input.prompt}`;
       // Add guidance for using multiple sources
       fullPrompt += `\n\nInstructions:
 - Analyze and synthesize information from all connected sources
+- Pay special attention to sources marked with "SCRAPED CONTENT" as they contain full, detailed information
 - Identify key themes, insights, and opportunities across the content
 - Create connections between different sources where relevant
-- Provide specific, actionable recommendations
-- Reference specific sources when making points`;
+- Provide specific, actionable recommendations based on the actual content
+- Reference specific sources when making points, especially quoting from scraped content
+- Use the enhanced metadata (highlights, sentiment, entities) to provide deeper insights
+- If scraped content is available, leverage it to provide more accurate and detailed responses`;
     }
 
     console.log('Calling Google AI model with prompt length:', fullPrompt.length);

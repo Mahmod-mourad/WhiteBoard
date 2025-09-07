@@ -16,6 +16,7 @@ import { useHistory } from '@/hooks/use-history';
 import { useConnections } from '@/hooks/use-connections';
 import { useToast } from '@/hooks/use-toast';
 import { scrapeContent } from '@/lib/scrapers';
+import { saveWhiteboard, loadWhiteboard } from '@/lib/supabase';
 
 export default function WhiteboardPage() {
   const { user, signOut } = useAuth();
@@ -34,7 +35,16 @@ export default function WhiteboardPage() {
   const connections = useConnections(items);
   const { toast } = useToast();
   
-
+  // Load whiteboard data when user is authenticated
+  React.useEffect(() => {
+    if (user) {
+      loadWhiteboard(user.id).then(({ data }) => {
+        if (data) {
+          setItems(data.data.items || []);
+        }
+      });
+    }
+  }, [user]);
   
   const lastGridPosition = React.useRef({ x: 0, y: 0 });
   const GRID_GUTTER = 20;
@@ -307,6 +317,14 @@ export default function WhiteboardPage() {
 
   const handleScaleChange = (newScale: number) => {
     setScale(newScale);
+  };
+
+  // Save whiteboard data
+  const handleSave = async () => {
+    if (user) {
+      await saveWhiteboard(user.id, { items, connections: connections.connections });
+      toast({ description: "Whiteboard saved!" });
+    }
   };
 
   // Enhanced item management functions
@@ -627,7 +645,7 @@ export default function WhiteboardPage() {
         <TopBar
           searchQuery={searchQuery}
           onSearchChange={setSearchQuery}
-          onSave={() => toast({ description: "Whiteboard saved!" })}
+          onSave={handleSave}
           onExport={() => toast({ description: "Export feature coming soon!" })}
           onShare={() => toast({ description: "Share feature coming soon!" })}
           projectName="My Whiteboard"

@@ -49,3 +49,46 @@ export type WindowItem = {
   created_at: string;
   updated_at: string;
 };
+
+// Data persistence functions
+export async function saveWhiteboard(userId: string, whiteboardData: any) {
+  const { data, error } = await supabase
+    .from('whiteboards')
+    .upsert({
+      user_id: userId,
+      name: 'My Whiteboard',
+      data: whiteboardData
+    });
+  return { data, error };
+}
+
+export async function loadWhiteboard(userId: string) {
+  const { data, error } = await supabase
+    .from('whiteboards')
+    .select('*')
+    .eq('user_id', userId)
+    .single();
+  return { data, error };
+}
+
+export async function saveWindowItems(whiteboardId: string, items: WindowItem[]) {
+  const { data, error } = await supabase
+    .from('window_items')
+    .upsert(
+      items.map(item => ({
+        ...item,
+        whiteboard_id: whiteboardId,
+        updated_at: new Date().toISOString()
+      }))
+    );
+  return { data, error };
+}
+
+export async function loadWindowItems(whiteboardId: string) {
+  const { data, error } = await supabase
+    .from('window_items')
+    .select('*')
+    .eq('whiteboard_id', whiteboardId)
+    .order('created_at', { ascending: true });
+  return { data, error };
+}
