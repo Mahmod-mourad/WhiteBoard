@@ -60,12 +60,12 @@ async function scrapeYouTubeContentEnhanced(url: string) {
     let viewCount = '';
     let publishDate = '';
 
-    // Method 1: Try YouTube Transcript API (if available)
+    // Method 1: Try YouTube Transcript API (if available) with enhanced error handling
     try {
       // Dynamic import to avoid build issues
       const { YoutubeTranscript } = await import('youtube-transcript');
       
-      // Try different language options
+      // Try different language options with timeout
       const transcriptAttempts = [
         { lang: 'en' },
         { lang: 'ar' },
@@ -74,7 +74,14 @@ async function scrapeYouTubeContentEnhanced(url: string) {
 
       for (const options of transcriptAttempts) {
         try {
-          const transcriptData = await YoutubeTranscript.fetchTranscript(videoId, options);
+          // Add timeout to prevent hanging on signature decipher issues
+          const transcriptPromise = YoutubeTranscript.fetchTranscript(videoId, options);
+          const timeoutPromise = new Promise((_, reject) => 
+            setTimeout(() => reject(new Error('Transcript timeout')), 10000)
+          );
+          
+          const transcriptData = await Promise.race([transcriptPromise, timeoutPromise]) as any[];
+          
           if (transcriptData && transcriptData.length > 0) {
             transcript = transcriptData
               .map(item => item.text)
@@ -87,7 +94,14 @@ async function scrapeYouTubeContentEnhanced(url: string) {
             break;
           }
         } catch (langError) {
-          console.log(`Transcript attempt failed for options:`, options);
+          const errorMsg = langError instanceof Error ? langError.message : 'Unknown error';
+          console.log(`Transcript attempt failed for options:`, options, 'Error:', errorMsg);
+          
+          // If it's a signature decipher error, skip remaining attempts
+          if (errorMsg.includes('signature') || errorMsg.includes('decipher') || errorMsg.includes('timeout')) {
+            console.log('Signature decipher error detected, skipping remaining transcript attempts');
+            break;
+          }
           continue;
         }
       }
@@ -262,13 +276,19 @@ ${viewCount ? `Views: ${viewCount}` : ''}
 ${publishDate ? `Published: ${publishDate}` : ''}
 
 CONTENT SUMMARY:
-This YouTube video contains valuable information for content creators and marketers. While we couldn't extract the full transcript, the video appears to cover topics relevant to digital marketing, content strategy, or educational content based on the title and available metadata.
+This YouTube video contains valuable information for content creators and marketers. While we couldn't extract the full transcript due to YouTube's content protection measures, the video appears to cover topics relevant to digital marketing, content strategy, or educational content based on the title and available metadata.
+
+TECHNICAL NOTE:
+YouTube frequently updates their content protection algorithms, which can temporarily affect automated transcript extraction. This is a common issue that affects many YouTube scraping tools.
 
 KEY ELEMENTS:
 - Professional video content
 - Likely contains actionable insights
 - Suitable for analysis and discussion
 - Part of ${channelName || 'established YouTube channel'}
+
+RECOMMENDATION:
+For complete content analysis, consider manually reviewing the video or using YouTube's official API with proper authentication.
       `.trim();
       contentSources.push('Enhanced Analysis');
     }
@@ -276,7 +296,7 @@ KEY ELEMENTS:
     if (!finalContent || finalContent.trim().length < 50) {
       return {
         success: false,
-        error: 'Could not extract sufficient content from this YouTube video. The video may be private, have restricted access, or lack transcript data.'
+        error: 'Could not extract sufficient content from this YouTube video. This may be due to:\n• YouTube\'s content protection measures (signature decipher algorithm changes)\n• Video privacy settings or regional restrictions\n• Lack of available transcript data\n• Temporary YouTube API issues\n\nTry a different video or use YouTube\'s official API for more reliable access.'
       };
     }
 
@@ -320,6 +340,13 @@ KEY ELEMENTS:
       };
     }
     
+    if (errorMessage.includes('signature') || errorMessage.includes('decipher')) {
+      return {
+        success: false,
+        error: 'YouTube\'s content protection is currently blocking transcript extraction. This is a temporary issue that affects many YouTube scraping tools. Try again later or use a different video.'
+      };
+    }
+    
     if (errorMessage.includes('private') || errorMessage.includes('unavailable')) {
       return {
         success: false,
@@ -336,7 +363,7 @@ KEY ELEMENTS:
 
     return {
       success: false,
-      error: `Enhanced YouTube scraping failed: ${error instanceof Error ? error.message : 'Unknown error'}. Please try a different video.`
+      error: `Enhanced YouTube scraping failed: ${error instanceof Error ? error.message : 'Unknown error'}. This may be due to YouTube's content protection measures. Please try a different video or try again later.`
     };
   }
 }
